@@ -406,26 +406,27 @@ const debouncedFetchOnlineUsers = debounce(fetchOnlineUsers, 1000);
 
 <style scoped>
 .app-container {
-  min-height: 100vh;
   height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
   overflow: hidden;
-  width: 100%;
-}
+  width: 100vh;
 
-.secret-chat {
-  margin: 0 auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 800px;
-  flex: 1;
-  overflow: hidden;
+
+    .secret-chat {
+        margin: 0 auto;
+        padding: 10px;
+        padding-bottom: 80px;
+        display: flex;
+        /* flex-direction: column; */
+        /* position: relative; */
+        /* box-sizing: border-box; */
+        width: 100%;
+            /* max-width: 800px; */
+        flex: 1;
+        overflow: hidden;
+    }
 }
 
 .join-options {
@@ -600,13 +601,6 @@ input {
     left: 0;
   }
 
-  .secret-chat {
-    padding: 0;
-    width: 100%;
-    max-width: none;
-    margin-top: 0;
-    flex: 1 1 auto;
-  }
 
   .join-options {
     padding: 20px;
@@ -779,6 +773,7 @@ input {
     .secret-chat {
       padding-left: 0;
       padding-right: 0;
+      width: 100%;
       height: 100%;
     }
 
