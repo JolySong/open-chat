@@ -1,80 +1,83 @@
 <template>
-  <div class="secret-chat">
-    <ChatHeader>
-      <template #default>
-        <template v-if="!inRoom">
-          <h2>Secret Chat</h2>
+    <div class="app-container">
+      <ChatHeader>
+        <template #default>
+          <template v-if="!inRoom">
+            <h2>Secret Chat</h2>
+          </template>
+          <template v-else>
+            <h3>Room: {{ roomId }} ({{ onlineUsers.size }} online)</h3>
+          </template>
         </template>
-        <template v-else>
-          <h3>Room: {{ roomId }} ({{ onlineUsers.size }} online)</h3>
+        <template #left v-if="inRoom">
+          <button class="icon-btn" @click="showUserList = !showUserList">
+            <span class="user-count">{{ onlineUsers.size }}</span>
+            <span class="user-icon">👥</span>
+          </button>
         </template>
-      </template>
-      <template #left v-if="inRoom">
-        <button class="icon-btn" @click="showUserList = !showUserList">
-          <span class="user-count">{{ onlineUsers.size }}</span>
-          <span class="user-icon">👥</span>
-        </button>
-      </template>
-      <template #right v-if="inRoom">
-        <button @click="leaveRoom" class="danger-btn">Leave</button>
-      </template>
-    </ChatHeader>
+        <template #right v-if="inRoom">
+          <button @click="leaveRoom" class="danger-btn">Leave</button>
+        </template>
+      </ChatHeader>
+      <div class="secret-chat">
+        
 
-    <div v-if="!inRoom" class="join-options">
-      <div class="buttons">
-        <button @click="createRoom" class="primary-btn">Create Room</button>
-        <button @click="showJoinForm = true" class="secondary-btn">Join Room</button>
-      </div>
-      
-      <div v-if="showJoinForm" class="join-form">
-        <input 
-          v-model="roomId" 
-          type="text" 
-          placeholder="Enter Room ID"
-        >
-        <button @click="joinRoom" class="primary-btn">Join</button>
-      </div>
-    </div>
-
-    <div v-else class="chat-room">
-      <div v-if="showUserList" class="user-list">
-        <div class="user-list-header">
-          <h4>Online Users ({{ onlineUsers.size }})</h4>
-          <button class="close-btn" @click="showUserList = false">&times;</button>
-        </div>
-        <div class="user-list-content">
-          <div v-for="user in Array.from(onlineUsers)" :key="user" class="user-item">
-            <UserAvatar :username="user" />
-            <span class="user-name">{{ user }}</span>
+        <div v-if="!inRoom" class="join-options">
+          <div class="buttons">
+            <button @click="createRoom" class="primary-btn">Create Room</button>
+            <button @click="showJoinForm = true" class="secondary-btn">Join Room</button>
+          </div>
+          
+          <div v-if="showJoinForm" class="join-form">
+            <input 
+              v-model="roomId" 
+              type="text" 
+              placeholder="Enter Room ID"
+            >
+            <button @click="joinRoom" class="primary-btn">Join</button>
           </div>
         </div>
-      </div>
 
-      <div class="messages" ref="messageContainer">
-        <div v-for="msg in messages" :key="msg.id" 
-             class="message" 
-             :class="{ 'own-message': msg.user === username }">
-          <UserAvatar :username="msg.user" />
-          <div class="message-content">
-            <div class="message-header">
-              <span class="user">{{ msg.user }}</span>
-              <span class="time">{{ formatTime(msg.timestamp) }}</span>
+        <div v-else class="chat-room">
+          <div v-if="showUserList" class="user-list">
+            <div class="user-list-header">
+              <h4>Online Users ({{ onlineUsers.size }})</h4>
+              <button class="close-btn" @click="showUserList = false">&times;</button>
             </div>
-            <div class="text">{{ msg.content }}</div>
+            <div class="user-list-content">
+              <div v-for="user in Array.from(onlineUsers)" :key="user" class="user-item">
+                <UserAvatar :username="user" />
+                <span class="user-name">{{ user }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="messages" ref="messageContainer">
+            <div v-for="msg in messages" :key="msg.id" 
+                 class="message" 
+                 :class="{ 'own-message': msg.user === username }">
+              <UserAvatar :username="msg.user" />
+              <div class="message-content">
+                <div class="message-header">
+                  <span class="user">{{ msg.user }}</span>
+                  <span class="time">{{ formatTime(msg.timestamp) }}</span>
+                </div>
+                <div class="text">{{ msg.content }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-area">
+            <input 
+              v-model="newMessage" 
+              @keyup.enter="sendMessage"
+              placeholder="Type a message..."
+            >
+            <button @click="sendMessage" class="primary-btn">Send</button>
           </div>
         </div>
       </div>
-
-      <div class="input-area">
-        <input 
-          v-model="newMessage" 
-          @keyup.enter="sendMessage"
-          placeholder="Type a message..."
-        >
-        <button @click="sendMessage" class="primary-btn">Send</button>
-      </div>
     </div>
-  </div>
 </template>
 
 <script setup>
@@ -84,6 +87,7 @@ import UserAvatar from './UserAvatar.vue'
 import ChatHeader from './ChatHeader.vue'
 import { chatApi } from '../api/chat'
 import UserIdentifier from '../utils/userIdentifier'
+import { debounce } from '../utils/debounce'
 import { useRouter } from 'vue-router'
 
 const inRoom = ref(false)
@@ -104,6 +108,57 @@ const router = useRouter()
 
 const MAX_RETRY_COUNT = 3  // 最大重试次数
 const retryCount = ref(0)  // 重试计数器
+
+const debouncedSendMessage = debounce(async (message) => {
+  if (!message.trim()) return;
+  
+  try {
+    loading.value = true;
+    console.log('Sending message:', {
+      content: message,
+      username: username.value,
+      roomId: roomId.value
+    });
+    
+    await chatApi.sendMessage(roomId.value, {
+      content: message,
+      username: username.value,
+      roomId: roomId.value
+    });
+    
+    scrollToBottom();
+  } catch (err) {
+    console.error('Send message error:', err);
+    error.value = 'Failed to send message';
+  } finally {
+    loading.value = false;
+  }
+}, 300);
+
+const debouncedJoinRoom = debounce(async () => {
+  if (!roomId.value.trim() || !username.value) {
+    error.value = username.value ? 'Please enter room ID' : 'Username not generated yet';
+    return;
+  }
+  
+  try {
+    loading.value = true;
+    const { data } = await chatApi.joinRoom(roomId.value, username.value);
+    if (data && data.onlineUsers) {
+      onlineUsers.value = new Set(data.onlineUsers);
+    }
+    inRoom.value = true;
+    showJoinForm.value = false;
+    startPolling();
+    startUserListPolling();
+    await fetchMessages();
+  } catch (err) {
+    error.value = err.message || 'Failed to join room';
+    console.error('Join room error:', err);
+  } finally {
+    loading.value = false;
+  }
+}, 500);
 
 const createRoom = async () => {
   try {
@@ -126,30 +181,7 @@ const createRoom = async () => {
 }
 
 const joinRoom = async () => {
-  if (roomId.value.trim() && username.value) {
-    try {
-      loading.value = true
-      const { data } = await chatApi.joinRoom(roomId.value, username.value)
-      // 立即更新在线用户列表
-      if (data && data.onlineUsers) {
-        onlineUsers.value = new Set(data.onlineUsers)
-        console.log('Initial online users:', Array.from(onlineUsers.value))
-      }
-      inRoom.value = true
-      showJoinForm.value = false
-      startPolling()
-      startUserListPolling()
-      await fetchMessages()
-    } catch (err) {
-      console.error('Join room error:', err)
-      error.value = err.message || 'Failed to join room'
-      console.error(err)
-    } finally {
-      loading.value = false
-    }
-  } else {
-    error.value = username.value ? 'Please enter room ID' : 'Username not generated yet'
-  }
+  await debouncedJoinRoom();
 }
 
 const leaveRoom = async () => {
@@ -174,29 +206,11 @@ const leaveRoom = async () => {
 }
 
 const sendMessage = async () => {
-  if (newMessage.value.trim()) {
-    try {
-      loading.value = true
-      console.log('Sending message:', {
-        content: newMessage.value,
-        username: username.value,
-        roomId: roomId.value
-      })
-      await chatApi.sendMessage(roomId.value, {
-        content: newMessage.value,
-        username: username.value,
-        roomId: roomId.value
-      })
-      newMessage.value = ''
-      scrollToBottom()
-    } catch (err) {
-      console.error('Send message error:', err)
-      error.value = 'Failed to send message'
-      console.error(err)
-    } finally {
-      loading.value = false
-    }
-  }
+  if (!newMessage.value.trim()) return;
+  
+  const message = newMessage.value;
+  newMessage.value = '';
+  await debouncedSendMessage(message);
 }
 
 const fetchMessages = async () => {
@@ -323,7 +337,7 @@ const startPolling = () => {
   if (!inRoom.value) return
   // 重置重试计数
   retryCount.value = 0
-  fetchMessages().catch(console.error)
+  debouncedFetchMessages().catch(console.error)
 }
 
 const stopPolling = () => {
@@ -352,7 +366,7 @@ const startUserListPolling = () => {
   if (!inRoom.value) return
   // 重置重试计数
   userListRetryCount.value = 0
-  fetchOnlineUsers().catch(console.error)
+  debouncedFetchOnlineUsers().catch(console.error)
 }
 
 const stopUserListPolling = () => {
@@ -385,19 +399,33 @@ window.addEventListener('beforeunload', () => {
     chatApi.leaveRoom(roomId.value, username.value).catch(console.error)
   }
 })
+
+const debouncedFetchMessages = debounce(fetchMessages, 1000);
+const debouncedFetchOnlineUsers = debounce(fetchOnlineUsers, 1000);
 </script>
 
 <style scoped>
-.secret-chat {
-  max-width: 100%;
-  margin: 0 auto;
+.app-container {
+  min-height: 100vh;
   height: 100vh;
-  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  overflow: hidden;
+  width: 100%;
+}
+
+.secret-chat {
+  margin: 0 auto;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 800px;
+  flex: 1;
   overflow: hidden;
-  padding-top: 60px;
 }
 
 .join-options {
@@ -410,8 +438,8 @@ window.addEventListener('beforeunload', () => {
   background: var(--bg-secondary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   margin: auto;
-  width: 100%;
-  height: 100%;
+  width: 400px;
+  border-radius: 8px;
 }
 
 .buttons {
@@ -468,18 +496,27 @@ input {
 .chat-room {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 60px);
+  height: 100%;
   background: var(--bg-secondary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  margin-top: 60px;
+  position: relative;
+  overflow: hidden;
+  width: 100vh;
 }
 
 .messages {
   flex-grow: 1;
   overflow-y: auto;
-  padding: 20px 15px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 15px;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  padding-bottom: 80px;
+  margin-top: 60px;
 }
 
 .message {
@@ -488,6 +525,7 @@ input {
   align-items: flex-start;
   max-width: 80%;
   animation: fadeIn 0.3s ease;
+  width: auto;
 }
 
 .message.own-message {
@@ -523,11 +561,20 @@ input {
   background: var(--bg-header);
   border-radius: 0 0 8px 8px;
   height: 60px;
+  width: 100%;
+  box-sizing: border-box;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
 }
 
 .input-area input {
   flex-grow: 1;
   min-width: 0;
+  width: 100%;
+  flex: 1;
 }
 
 @keyframes fadeIn {
@@ -543,41 +590,224 @@ input {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .app-container {
+    height: 100vh;
+    height: -webkit-fill-available;
+    width: 100vw;
+    max-width: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
+  }
+
   .secret-chat {
     padding: 0;
-    padding-top: 50px;
-  }
-
-  .chat-room {
-    height: calc(100vh - 50px);
-  }
-
-  .message {
-    max-width: 90%;
+    width: 100%;
+    max-width: none;
+    margin-top: 0;
+    flex: 1 1 auto;
   }
 
   .join-options {
-    padding: 1rem 10px;
+    padding: 20px;
+    height: 100%;
+    min-height: 100%;
+    width: 100%;
+    border-radius: 0;
     margin: 0;
+    box-sizing: border-box;
+  }
+
+  .chat-room {
+    border-radius: 0;
+    height: 100%;
+    margin-top: 0;
+    width: 100vw;
+    position: relative;
+    padding-top: 60px;
   }
 
   .messages {
-    padding: 15px 10px;
+    padding: 15px;
+    padding-bottom: calc(70px + env(safe-area-inset-bottom));
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    margin-top: 0;
+  }
+
+  .message {
+    max-width: 85%;
+    margin: 8px 0;
+    font-size: 0.95em;
+    width: auto;
+  }
+
+  .message-content {
+    padding: 10px 12px;
+    font-size: 0.9em;
   }
 
   .input-area {
+    border-radius: 0;
     padding: 10px;
+    gap: 8px;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    box-sizing: border-box;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    margin-bottom: 0;
+    z-index: 100;
+  }
+
+  .input-area input {
+    height: 36px;
+    font-size: 16px;
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .input-area button {
+    padding: 8px 16px;
+    min-width: 60px;
+  }
+
+  /* 用户列表适配 */
+  .user-list {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    width: 85%;
+    max-width: 300px;
+    height: calc(100vh - 60px);
+    z-index: 1000;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .user-list.active {
+    transform: translateX(0);
+  }
+
+  /* 加入表单适配 */
+  .join-options {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - 60px);
+  }
+
+  .join-form {
+    width: 100%;
+    max-width: none;
+    padding: 20px;
+    margin-top: 30px;
+  }
+
+  .join-form input {
+    width: 100%;
+    margin-bottom: 10px;
   }
 }
 
 @media (max-width: 480px) {
-  .buttons {
+  .message-header {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
+    margin-bottom: 3px;
   }
 
-  button {
-    margin: 5px 0;
+  .time {
+    font-size: 0.7em;
+    margin-top: 2px;
+    opacity: 0.8;
+  }
+
+  .buttons {
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 280px;
+    margin: 0 auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+  }
+
+  .buttons button {
+    width: 100%;
+    height: 44px;
+  }
+
+  .join-form {
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
+    padding: 0 20px;
+    box-sizing: border-box;
+  }
+
+  .join-form button {
+    width: 100%;
+    height: 44px;
+  }
+
+  .join-options {
+    padding: 15px;
+    margin: 0;
+  }
+}
+
+/* 处理安全区域 */
+@supports (padding: max(0px)) {
+  .app-container {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  @media (max-width: 768px) {
+    .secret-chat {
+      padding-left: 0;
+      padding-right: 0;
+      height: 100%;
+    }
+
+    .chat-room {
+      padding-top: calc(60px + env(safe-area-inset-top));
+    }
+
+    .input-area {
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      padding-left: max(10px, env(safe-area-inset-left));
+      padding-right: max(10px, env(safe-area-inset-right));
+    }
+
+    .user-list {
+      padding-bottom: env(safe-area-inset-bottom);
+      height: calc(100% - env(safe-area-inset-bottom));
+    }
+  }
+}
+
+/* 添加触摸反馈 */
+@media (hover: none) {
+  button:active {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+
+  .message:active {
+    opacity: 0.9;
   }
 }
 
@@ -626,7 +856,7 @@ input {
 .user-list {
   position: absolute;
   left: 0;
-  top: 60px;
+  top: 80px;
   bottom: 0;
   width: 250px;
   background: var(--bg-secondary);
@@ -635,6 +865,7 @@ input {
   display: flex;
   flex-direction: column;
   animation: slideIn 0.3s ease;
+  border-radius: 0 0 0 8px;
 }
 
 .user-list-header {
@@ -709,6 +940,25 @@ input {
   .user-list {
     top: 50px;
     width: 200px;
+  }
+}
+
+/* 修复 iOS Safari 高度问题 */
+@supports (-webkit-touch-callout: none) {
+  .app-container {
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* 修复 iOS 键盘弹出时的滚动问题 */
+@supports (-webkit-touch-callout: none) {
+  .messages {
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .input-area {
+    position: fixed;
   }
 }
 </style> 

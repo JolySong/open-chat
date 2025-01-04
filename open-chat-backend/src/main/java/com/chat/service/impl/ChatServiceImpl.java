@@ -59,7 +59,7 @@ public class ChatServiceImpl implements ChatService {
     public String createRoom() {
         try {
             ChatRoom room = new ChatRoom();
-            String roomId = UUID.randomUUID().toString().replace("-", "");
+            String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 11);
             room.setId(roomId);
             room.setName("Room-" + roomId.substring(0, 6));
             
